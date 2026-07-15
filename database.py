@@ -12,7 +12,7 @@ MONGO_USER = os.getenv("MONGO_INITDB_ROOT_USERNAME", "admin")
 MONGO_PASS = os.getenv("MONGO_INITDB_ROOT_PASSWORD", "cupid2024")
 MONGO_DB = os.getenv("MONGO_DATABASE", "cupid")
 
-MONGO_URI = f"mongodb://{MONGO_USER}:{MONGO_PASS}@{MONGO_HOST}:{MONGO_PORT}"
+MONGO_URI = f"mongodb://{MONGO_USER}:{MONGO_PASS}@{MONGO_HOST}:{MONGO_PORT}/?directConnection=true"
 
 _client: Optional[AsyncIOMotorClient] = None
 _db: Optional[AsyncIOMotorDatabase] = None
