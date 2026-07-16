@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from database import get_db
 from embeddings import _build_profile_text, embed_profile, embed_query
+from reranker import rerank_documents
 from models import (
     NaturalSearchParams,
     NaturalSearchResponse,
@@ -162,8 +163,8 @@ async def natural_search(params: NaturalSearchParams):
     """
     用自然语言描述搜索好友资料。
 
-    将用户输入的描述转为向量，与每个资料的 embedding 计算余弦相似度，
-    按相似度降序返回。可叠加结构化条件预筛选。
+    流程：用户描述 → Embedding 粗召回 → 百炼 Reranker 精排 → 返回结果。
+    可叠加结构化条件预筛选（性别、年龄、地区等）。
 
     示例："30岁左右的程序员，喜欢运动，性格开朗"
     """
@@ -180,7 +181,7 @@ async def natural_search(params: NaturalSearchParams):
     # 只搜索有 embedding 的资料
     pre_filters["embedding"] = {"$exists": True}
 
-    # 3. 聚合管线：dot product 计算语义相似度
+    # 3. 聚合管线：dot product 计算余弦相似度
     pipeline = [
         {"$match": pre_filters},
         {
@@ -204,18 +205,69 @@ async def natural_search(params: NaturalSearchParams):
     count_result = [doc async for doc in db[PROFILES_COLLECTION].aggregate(count_pipeline)]
     total = count_result[0]["total"] if count_result else 0
 
-    # 5. 排序 + 分页
-    skip = (params.page - 1) * params.page_size
-    results_pipeline = pipeline + [
-        {"$sort": {"score": -1}},
-        {"$skip": skip},
-        {"$limit": params.page_size},
-    ]
+    if total == 0:
+        return NaturalSearchResponse(total=0, page=params.page, page_size=params.page_size, results=[])
 
-    results = []
-    async for doc in db[PROFILES_COLLECTION].aggregate(results_pipeline):
-        score = doc.pop("score", 0.0)
-        results.append(NaturalSearchResult(profile=_serialize(doc), score=round(score, 4)))
+    # 5. 获取候选集
+    if params.use_rerank:
+        # 粗召回：取 top-N 送入重排
+        candidates_pipeline = pipeline + [
+            {"$sort": {"score": -1}},
+            {"$limit": params.rerank_top_k},
+        ]
+    else:
+        # 不走重排，直接分页
+        skip = (params.page - 1) * params.page_size
+        candidates_pipeline = pipeline + [
+            {"$sort": {"score": -1}},
+            {"$skip": skip},
+            {"$limit": params.page_size},
+        ]
+
+    docs: list[dict] = []
+    scores: list[float] = []
+    async for doc in db[PROFILES_COLLECTION].aggregate(candidates_pipeline):
+        scores.append(doc.pop("score", 0.0))
+        docs.append(doc)
+
+    # 6. 重排
+    if params.use_rerank and docs:
+        try:
+            # 提取每个候选资料的文本表示
+            doc_texts = [d.get("embedding_text", "") for d in docs]
+            rerank_results = await rerank_documents(params.query, doc_texts)
+
+            # 建立 index → relevance_score 映射
+            score_map = {r["index"]: r["relevance_score"] for r in rerank_results}
+            ranked = [(docs[i], score_map.get(i, 0.0)) for i in range(len(docs))]
+            ranked.sort(key=lambda x: x[1], reverse=True)
+
+            # 分页
+            page_start = (params.page - 1) * params.page_size
+            page_end = page_start + params.page_size
+            page_items = ranked[page_start:page_end]
+
+            # 重排后的总量以实际粗召回数为准
+            total = min(total, params.rerank_top_k)
+        except Exception:
+            import traceback
+            print(f"[WARN] 重排失败，回退到余弦相似度排序\n{traceback.format_exc()}")
+            # 回退：使用余弦相似度分数，同时需要自行分页
+            ranked = list(zip(docs, scores))
+            ranked.sort(key=lambda x: x[1], reverse=True)
+            total = min(total, params.rerank_top_k)
+            page_start = (params.page - 1) * params.page_size
+            page_end = page_start + params.page_size
+            page_items = ranked[page_start:page_end]
+    else:
+        # 非重排模式：聚合管线已分页，直接组装
+        page_items = list(zip(docs, scores))
+
+    # 7. 构建响应
+    results = [
+        NaturalSearchResult(profile=_serialize(doc), score=round(score, 4))
+        for doc, score in page_items
+    ]
 
     return NaturalSearchResponse(
         total=total,

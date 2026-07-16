@@ -178,7 +178,11 @@ class SearchResponse(BaseModel):
 class NaturalSearchParams(BaseModel):
     """自然语言搜索参数"""
     query: str = Field(min_length=1, max_length=500, description="自然语言描述，如'30岁左右的程序员，喜欢运动'")
-    min_score: float = Field(default=0.5, ge=0, le=1.0, description="最低相似度阈值")
+    min_score: float = Field(default=0.5, ge=0, le=1.0, description="最低余弦相似度阈值")
+
+    # 重排
+    use_rerank: bool = Field(default=True, description="是否启用百炼重排序（大幅提升准确率）")
+    rerank_top_k: int = Field(default=50, ge=1, le=100, description="粗召回候选数量，送入重排模型精排")
 
     # 可选的结构化预筛选
     gender: Gender | None = None
@@ -194,7 +198,7 @@ class NaturalSearchParams(BaseModel):
 class NaturalSearchResult(BaseModel):
     """自然语言搜索结果"""
     profile: ProfileResponse
-    score: float = Field(description="语义相似度分数 (0~1)")
+    score: float = Field(description="语义相似度分数 (0~1)，启用重排时为百炼 relevance_score")
 
 
 class NaturalSearchResponse(BaseModel):

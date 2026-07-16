@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from database import close_db, connect_db
+from embeddings import close_embedding_client
+from reranker import close_rerank_client
 from routes import router
 
 
@@ -11,6 +13,8 @@ async def lifespan(app: FastAPI):
     """应用生命周期：启动时连接数据库，关闭时断开"""
     await connect_db()
     yield
+    await close_rerank_client()
+    await close_embedding_client()
     await close_db()
 
 
