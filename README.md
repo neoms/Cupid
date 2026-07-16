@@ -20,10 +20,12 @@ docker compose up -d
 
 ### 2. 配置环境变量
 
-编辑 `.env`，填入百炼 API Key：
+编辑 `.env`，填入百炼 API Key（模型和维度可按需调整）：
 
 ```env
 DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxx
+EMBEDDING_MODEL=text-embedding-v3
+EMBEDDING_DIM=1024
 ```
 
 ### 3. 安装依赖

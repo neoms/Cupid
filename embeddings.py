@@ -10,10 +10,8 @@ load_dotenv()
 
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
 DASHSCOPE_URL = "https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding"
-
-# text-embedding-v3 默认 1024 维，可通过参数调整
-EMBEDDING_MODEL = "text-embedding-v3"
-EMBEDDING_DIM = 1024
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-v3")
+EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "1024"))
 
 _client: Optional[httpx.AsyncClient] = None
 
