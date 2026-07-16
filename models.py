@@ -8,16 +8,16 @@ from pydantic import BaseModel, Field, model_validator
 # ────────────── 枚举 ──────────────
 
 class Gender(str, Enum):
-    male = "male"
-    female = "female"
+    male = "男"
+    female = "女"
 
 
 class EducationLevel(str, Enum):
-    high_school = "high_school"
-    associate = "associate"
-    bachelor = "bachelor"
-    master = "master"
-    doctor = "doctor"
+    high_school = "高中"
+    associate = "大专"
+    bachelor = "本科"
+    master = "硕士"
+    doctor = "博士"
 
 
 class IncomeRange(str, Enum):
@@ -29,16 +29,16 @@ class IncomeRange(str, Enum):
 
 
 class MarriageStatus(str, Enum):
-    never_married = "never_married"
-    divorced = "divorced"
-    widowed = "widowed"
+    never_married = "未婚"
+    divorced = "离异"
+    widowed = "丧偶"
 
 
 class BodyType(str, Enum):
-    slim = "slim"
-    average = "average"
-    athletic = "athletic"
-    plump = "plump"
+    slim = "偏瘦"
+    average = "匀称"
+    athletic = "运动型"
+    plump = "丰满"
 
 
 # ────────────── 择偶偏好 ──────────────

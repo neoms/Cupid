@@ -25,16 +25,16 @@ PROVINCE_CITY = [
 ]
 
 SCHOOLS = [
-    ("北京大学", "bachelor"), ("清华大学", "master"), ("复旦大学", "doctor"),
-    ("上海交通大学", "master"), ("浙江大学", "bachelor"), ("南京大学", "bachelor"),
-    ("武汉大学", "master"), ("中山大学", "bachelor"), ("华中科技大学", "master"),
-    ("同济大学", "bachelor"), ("中国人民大学", "master"), ("厦门大学", "bachelor"),
-    ("四川大学", "bachelor"), ("中国传媒大学", "bachelor"), ("中央美术学院", "bachelor"),
-    ("西安交通大学", "master"), ("哈尔滨工业大学", "bachelor"), ("东南大学", "master"),
-    ("华东师范大学", "master"), ("华东政法大学", "bachelor"),
-    ("重庆大学", "bachelor"), ("北京理工大学", "bachelor"),
-    ("华南理工大学", "bachelor"), ("电子科技大学", "master"),
-    ("本地高中", "high_school"), ("本地职业技术学院", "associate"),
+    ("北京大学", "本科"), ("清华大学", "硕士"), ("复旦大学", "博士"),
+    ("上海交通大学", "硕士"), ("浙江大学", "本科"), ("南京大学", "本科"),
+    ("武汉大学", "硕士"), ("中山大学", "本科"), ("华中科技大学", "硕士"),
+    ("同济大学", "本科"), ("中国人民大学", "硕士"), ("厦门大学", "本科"),
+    ("四川大学", "本科"), ("中国传媒大学", "本科"), ("中央美术学院", "本科"),
+    ("西安交通大学", "硕士"), ("哈尔滨工业大学", "本科"), ("东南大学", "硕士"),
+    ("华东师范大学", "硕士"), ("华东政法大学", "本科"),
+    ("重庆大学", "本科"), ("北京理工大学", "本科"),
+    ("华南理工大学", "本科"), ("电子科技大学", "硕士"),
+    ("本地高中", "高中"), ("本地职业技术学院", "大专"),
 ]
 
 OCCUPATIONS = [
@@ -90,7 +90,7 @@ INTEREST_POOLS = [
     ["羽毛球", "乒乓球", "台球"],
 ]
 
-MARRIAGE_WEIGHTS = [("never_married", 85), ("divorced", 13), ("widowed", 2)]
+MARRIAGE_WEIGHTS = [("未婚", 85), ("离异", 13), ("丧偶", 2)]
 INCOME_WEIGHTS = [("10万以下", 10), ("10-20万", 30), ("20-50万", 35), ("50-100万", 20), ("100万以上", 5)]
 
 
@@ -105,55 +105,55 @@ def random_date(start: date, end: date) -> date:
 
 
 def gen_profile(i: int) -> dict:
-    gender = "male" if random.random() < 0.52 else "female"
+    gender = "男" if random.random() < 0.52 else "女"
     surname = random.choice(SURNAMES)
-    name_pool = GIVEN_NAMES_M if gender == "male" else GIVEN_NAMES_F
+    name_pool = GIVEN_NAMES_M if gender == "男" else GIVEN_NAMES_F
     given = random.choice(name_pool)
     nickname = f"{surname}{given}{random.randint(100, 999)}" if i % 5 == 0 else f"{surname}{given}"
 
     birth = random_date(date(1990, 1, 1), date(2002, 12, 31)).isoformat()
-    if gender == "male":
+    if gender == "男":
         height = random.randint(168, 192)
         weight = random.randint(58, 95)
-        body_pool = ["average", "athletic", "slim", "plump"]
+        body_pool = ["匀称", "运动型", "偏瘦", "丰满"]
         body_weights = [40, 30, 20, 10]
     else:
         height = random.randint(155, 175)
         weight = random.randint(42, 68)
-        body_pool = ["slim", "average", "athletic", "plump"]
+        body_pool = ["偏瘦", "匀称", "运动型", "丰满"]
         body_weights = [40, 35, 15, 10]
     body_type = random.choices(body_pool, weights=body_weights, k=1)[0]
 
     province, city = random.choice(PROVINCE_CITY)
 
     school, edu = random.choice(SCHOOLS)
-    if edu == "high_school":
+    if edu == "高中":
         school = "本地高中"
-    elif edu == "associate":
+    elif edu == "大专":
         school = "本地职业技术学院"
     occupation, industry = random.choice(OCCUPATIONS)
     income = pick_weighted(INCOME_WEIGHTS)
     marriage = pick_weighted(MARRIAGE_WEIGHTS)
-    has_children = marriage == "divorced" and random.random() < 0.3
+    has_children = marriage == "离异" and random.random() < 0.3
     want_children = random.choice([True, False])
     smoking = random.choice([True, False])
     drinking = random.choice([True, False])
 
     interests = random.choice(INTEREST_POOLS)[: random.randint(2, 3)]
 
-    intro_pool = SELF_INTROS_M if gender == "male" else SELF_INTROS_F
+    intro_pool = SELF_INTROS_M if gender == "男" else SELF_INTROS_F
     self_intro = random.choice(intro_pool) + "。"
 
     # 择偶偏好
-    pref_gender = "female" if gender == "male" else "male"
-    pref_edu = random.choice(["high_school", "associate", "bachelor", "master", "doctor"])
-    pref_marriage = random.choice(["never_married", "divorced"])
+    pref_gender = "女" if gender == "男" else "男"
+    pref_edu = random.choice(["高中", "大专", "本科", "硕士", "博士"])
+    pref_marriage = random.choice(["未婚", "离异"])
     pref = {
         "gender": pref_gender,
         "age_min": max(22, random.randint(22, 30)),
         "age_max": min(45, random.randint(32, 45)),
-        "height_min": 168 if pref_gender == "male" else 155,
-        "height_max": 185 if pref_gender == "male" else 170,
+        "height_min": 168 if pref_gender == "男" else 155,
+        "height_max": 185 if pref_gender == "男" else 170,
         "education": pref_edu,
         "province": province if random.random() < 0.5 else random.choice([p for p, _ in PROVINCE_CITY]),
         "city": city if random.random() < 0.5 else random.choice([c for _, c in PROVINCE_CITY]),
@@ -197,8 +197,8 @@ if __name__ == "__main__":
         json.dump(users, f, ensure_ascii=False, indent=2)
 
     # 统计概览
-    males = sum(1 for u in users if u["gender"] == "male")
-    females = sum(1 for u in users if u["gender"] == "female")
+    males = sum(1 for u in users if u["gender"] == "男")
+    females = sum(1 for u in users if u["gender"] == "女")
     cities = len(set(u["city"] for u in users))
     marriage_counts = {}
     for u in users:

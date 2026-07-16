@@ -22,7 +22,7 @@ def _build_profile_text(profile: dict) -> str:
 
     # 基本信息
     parts.append(f"昵称{profile.get('nickname', '')}")
-    parts.append(f"性别{'男' if profile.get('gender') == 'male' else '女'}")
+    parts.append(f"性别{profile.get('gender', '')}")
     birth = profile.get("birth_date")
     if birth:
         birth_str = birth.strftime("%Y年%m月%d日") if hasattr(birth, "strftime") else str(birth)[:10]
@@ -35,11 +35,7 @@ def _build_profile_text(profile: dict) -> str:
     parts.append(f"所在地{profile.get('province', '')}{profile.get('city', '')}")
 
     # 学历 & 职业
-    edu_map = {
-        "high_school": "高中", "associate": "大专", "bachelor": "本科",
-        "master": "硕士", "doctor": "博士",
-    }
-    parts.append(f"学历{edu_map.get(profile.get('education', ''), profile.get('education', ''))}")
+    parts.append(f"学历{profile.get('education', '')}")
     if profile.get("school"):
         parts.append(f"毕业院校{profile['school']}")
     parts.append(f"职业{profile.get('occupation', '')}")
@@ -49,13 +45,11 @@ def _build_profile_text(profile: dict) -> str:
         parts.append(f"年收入{profile['income_range']}")
 
     # 外貌
-    body_map = {"slim": "偏瘦", "average": "匀称", "athletic": "运动型", "plump": "丰满"}
     if profile.get("body_type"):
-        parts.append(f"体型{body_map.get(profile['body_type'], profile['body_type'])}")
+        parts.append(f"体型{profile['body_type']}")
 
     # 婚恋
-    marriage_map = {"never_married": "未婚", "divorced": "离异", "widowed": "丧偶"}
-    parts.append(f"婚姻状况{marriage_map.get(profile.get('marriage_status', ''), profile.get('marriage_status', ''))}")
+    parts.append(f"婚姻状况{profile.get('marriage_status', '')}")
     if profile.get("has_children"):
         parts.append("有子女")
     if profile.get("want_children") is True:
@@ -85,13 +79,13 @@ def _build_profile_text(profile: dict) -> str:
     if pref:
         pref_parts = ["择偶偏好"]
         if pref.get("gender"):
-            pref_parts.append(f"希望对方性别{'男' if pref['gender'] == 'male' else '女'}")
+            pref_parts.append(f"希望对方性别{pref['gender']}")
         pref_parts.append(f"年龄{pref.get('age_min', '')}到{pref.get('age_max', '')}岁")
         if pref.get("height_min") or pref.get("height_max"):
             h = f"身高{pref.get('height_min', '不限')}到{pref.get('height_max', '不限')}厘米"
             pref_parts.append(h)
         if pref.get("education"):
-            pref_parts.append(f"学历{edu_map.get(pref['education'], pref['education'])}")
+            pref_parts.append(f"学历{pref['education']}")
         if pref.get("province") or pref.get("city"):
             pref_parts.append(f"希望对方在{pref.get('province', '')}{pref.get('city', '')}")
         parts.append("，".join(pref_parts))

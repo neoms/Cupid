@@ -89,7 +89,7 @@ async def create_profile(profile: ProfileCreate):
     db = get_db()
     now = datetime.utcnow()
 
-    doc = profile.model_dump()
+    doc = profile.model_dump(mode="json")  # mode=json 将枚举转为字符串值
     doc["birth_date"] = datetime.combine(profile.birth_date, datetime.min.time())
     doc["updated_at"] = now
 
