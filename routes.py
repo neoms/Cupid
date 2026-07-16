@@ -1,12 +1,15 @@
-import math
+import traceback
 import uuid
 from datetime import date, datetime
 
-from bson import ObjectId
 from fastapi import APIRouter, HTTPException, status
 
 from database import get_db
+from embeddings import embed_profile, embed_query
 from models import (
+    NaturalSearchParams,
+    NaturalSearchResponse,
+    NaturalSearchResult,
     ProfileCreate,
     ProfileResponse,
     SearchParams,
@@ -33,6 +36,44 @@ def _serialize(doc: dict) -> ProfileResponse:
     return ProfileResponse(**doc)
 
 
+def _build_filters(params) -> dict:
+    """构建结构化筛选条件（共用逻辑）"""
+    filters: dict = {}
+
+    if params.gender:
+        filters["gender"] = params.gender.value
+
+    if getattr(params, "age_min", None) is not None or getattr(params, "age_max", None) is not None:
+        today = date.today()
+        birth_conditions: dict = {}
+        if params.age_max is not None:
+            birth_conditions["$gte"] = datetime(today.year - params.age_max, 1, 1)
+        if params.age_min is not None:
+            birth_conditions["$lte"] = datetime(today.year - params.age_min, 12, 31)
+        if birth_conditions:
+            filters["birth_date"] = birth_conditions
+
+    if getattr(params, "height_min", None) is not None:
+        filters.setdefault("height", {})["$gte"] = params.height_min
+    if getattr(params, "height_max", None) is not None:
+        filters.setdefault("height", {})["$lte"] = params.height_max
+
+    if getattr(params, "province", None):
+        filters["province"] = params.province
+    if getattr(params, "city", None):
+        filters["city"] = params.city
+    if getattr(params, "education", None):
+        filters["education"] = params.education.value
+    if getattr(params, "marriage_status", None):
+        filters["marriage_status"] = params.marriage_status.value
+    if getattr(params, "occupation", None):
+        filters["occupation"] = {"$regex": params.occupation, "$options": "i"}
+    if getattr(params, "interests", None):
+        filters["interests"] = {"$in": params.interests}
+
+    return filters
+
+
 # ────────────── 接口 1：创建/更新用户资料 ──────────────
 
 @router.post("/profiles", response_model=ProfileResponse, status_code=status.HTTP_201_CREATED)
@@ -40,8 +81,10 @@ async def create_profile(profile: ProfileCreate):
     """
     创建或更新用户资料。
 
-    - 如果传入 user_id 且已存在，则更新该用户资料。
-    - 如果未传 user_id，则自动生成一个新 user_id 并创建资料。
+    - 传入 user_id 且存在 → 更新。
+    - 未传 user_id → 自动生成新 ID 并创建。
+
+    创建/更新时自动生成向量嵌入（embedding），用于自然语言搜索。
     """
     db = get_db()
     now = datetime.utcnow()
@@ -50,9 +93,13 @@ async def create_profile(profile: ProfileCreate):
     doc["birth_date"] = datetime.combine(profile.birth_date, datetime.min.time())
     doc["updated_at"] = now
 
+    # 生成向量嵌入（失败不影响资料创建）
+    try:
+        doc["embedding"] = await embed_profile(doc)
+    except Exception:
+        print(f"[WARN] 向量生成失败，将跳过 embedding 字段\n{traceback.format_exc()}")
+
     if profile.user_id:
-        # 传了 user_id：存在则更新，不存在则创建
-        doc["created_at"] = now  # 新建时设置，更新时用 $setOnInsert
         result = await db[PROFILES_COLLECTION].find_one_and_update(
             {"user_id": profile.user_id},
             {"$set": doc, "$setOnInsert": {"created_at": now}},
@@ -60,7 +107,6 @@ async def create_profile(profile: ProfileCreate):
             return_document=True,
         )
     else:
-        # 未传 user_id：自动生成并创建
         doc["user_id"] = uuid.uuid4().hex[:16]
         doc["created_at"] = now
         result = await db[PROFILES_COLLECTION].find_one_and_update(
@@ -73,59 +119,23 @@ async def create_profile(profile: ProfileCreate):
     return _serialize(result)
 
 
-# ────────────── 接口 2：好友搜索 ──────────────
+# ────────────── 接口 2：字段筛选搜索 ──────────────
 
 @router.post("/profiles/search", response_model=SearchResponse)
 async def search_profiles(params: SearchParams):
     """
-    搜索匹配的好友资料。
+    按结构化字段搜索好友资料。
 
-    支持按性别、年龄、身高、地区、学历、婚姻状态、职业等条件筛选，
-    支持分页和排序。
+    支持按性别、年龄、身高、地区、学历、婚姻状态、职业等条件筛选，支持分页和排序。
     """
     db = get_db()
-    filters: dict = {}
+    filters = _build_filters(params)
 
-    if params.gender:
-        filters["gender"] = params.gender.value
-
-    if params.age_min is not None or params.age_max is not None:
-        today = date.today()
-        birth_conditions: dict = {}
-        if params.age_max is not None:
-            birth_conditions["$gte"] = datetime(today.year - params.age_max, 1, 1)
-        if params.age_min is not None:
-            birth_conditions["$lte"] = datetime(today.year - params.age_min, 12, 31)
-        if birth_conditions:
-            filters["birth_date"] = birth_conditions
-
-    if params.height_min is not None:
-        filters.setdefault("height", {})["$gte"] = params.height_min
-    if params.height_max is not None:
-        filters.setdefault("height", {})["$lte"] = params.height_max
-
-    if params.province:
-        filters["province"] = params.province
-    if params.city:
-        filters["city"] = params.city
-    if params.education:
-        filters["education"] = params.education.value
-    if params.marriage_status:
-        filters["marriage_status"] = params.marriage_status.value
-    if params.occupation:
-        filters["occupation"] = {"$regex": params.occupation, "$options": "i"}
-
-    if params.interests:
-        filters["interests"] = {"$in": params.interests}
-
-    # 确定排序
     sort_field = params.sort_by or "created_at"
-    sort_direction = -1  # 默认降序
+    sort_direction = -1
 
-    # 统计总数
     total = await db[PROFILES_COLLECTION].count_documents(filters)
 
-    # 分页查询
     skip = (params.page - 1) * params.page_size
     cursor = (
         db[PROFILES_COLLECTION]
@@ -137,6 +147,76 @@ async def search_profiles(params: SearchParams):
     results = [_serialize(doc) async for doc in cursor]
 
     return SearchResponse(
+        total=total,
+        page=params.page,
+        page_size=params.page_size,
+        results=results,
+    )
+
+
+# ────────────── 接口 3：自然语言搜索 ──────────────
+
+@router.post("/profiles/search/natural", response_model=NaturalSearchResponse)
+async def natural_search(params: NaturalSearchParams):
+    """
+    用自然语言描述搜索好友资料。
+
+    将用户输入的描述转为向量，与每个资料的 embedding 计算余弦相似度，
+    按相似度降序返回。可叠加结构化条件预筛选。
+
+    示例："30岁左右的程序员，喜欢运动，性格开朗"
+    """
+    db = get_db()
+
+    # 1. 将查询文本转为向量
+    try:
+        query_embedding = await embed_query(params.query)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"向量化查询失败: {e}")
+
+    # 2. 构建预筛选条件（可选）
+    pre_filters = _build_filters(params)
+    # 只搜索有 embedding 的资料
+    pre_filters["embedding"] = {"$exists": True}
+
+    # 3. 聚合管线：dot product 计算语义相似度
+    pipeline = [
+        {"$match": pre_filters},
+        {
+            "$addFields": {
+                "score": {
+                    "$sum": {
+                        "$map": {
+                            "input": {"$zip": {"inputs": ["$embedding", query_embedding]}},
+                            "as": "pair",
+                            "in": {"$multiply": [{"$arrayElemAt": ["$$pair", 0]}, {"$arrayElemAt": ["$$pair", 1]}]},
+                        }
+                    }
+                }
+            }
+        },
+        {"$match": {"score": {"$gte": params.min_score}}},
+    ]
+
+    # 4. 统计总数
+    count_pipeline = pipeline + [{"$count": "total"}]
+    count_result = [doc async for doc in db[PROFILES_COLLECTION].aggregate(count_pipeline)]
+    total = count_result[0]["total"] if count_result else 0
+
+    # 5. 排序 + 分页
+    skip = (params.page - 1) * params.page_size
+    results_pipeline = pipeline + [
+        {"$sort": {"score": -1}},
+        {"$skip": skip},
+        {"$limit": params.page_size},
+    ]
+
+    results = []
+    async for doc in db[PROFILES_COLLECTION].aggregate(results_pipeline):
+        score = doc.pop("score", 0.0)
+        results.append(NaturalSearchResult(profile=_serialize(doc), score=round(score, 4)))
+
+    return NaturalSearchResponse(
         total=total,
         page=params.page,
         page_size=params.page_size,

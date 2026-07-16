@@ -171,3 +171,35 @@ class SearchResponse(BaseModel):
     page: int
     page_size: int
     results: list[ProfileResponse]
+
+
+# ────────────── 自然语言搜索 ──────────────
+
+class NaturalSearchParams(BaseModel):
+    """自然语言搜索参数"""
+    query: str = Field(min_length=1, max_length=500, description="自然语言描述，如'30岁左右的程序员，喜欢运动'")
+    min_score: float = Field(default=0.5, ge=0, le=1.0, description="最低相似度阈值")
+
+    # 可选的结构化预筛选
+    gender: Gender | None = None
+    age_min: int | None = Field(default=None, ge=18, le=100)
+    age_max: int | None = Field(default=None, ge=18, le=100)
+    province: str | None = None
+    city: str | None = None
+
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+
+
+class NaturalSearchResult(BaseModel):
+    """自然语言搜索结果"""
+    profile: ProfileResponse
+    score: float = Field(description="语义相似度分数 (0~1)")
+
+
+class NaturalSearchResponse(BaseModel):
+    """自然语言搜索响应"""
+    total: int
+    page: int
+    page_size: int
+    results: list[NaturalSearchResult]
