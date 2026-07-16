@@ -1,12 +1,13 @@
 # Cupid
 
-婚恋交友用户资料后台服务，基于 FastAPI + MongoDB Atlas Local 构建。
+婚恋交友用户资料后台服务，基于 FastAPI + MongoDB Atlas Local 构建，支持字段筛选与自然语言语义搜索。
 
 ## 技术栈
 
 - **Web 框架**：FastAPI
 - **数据库**：MongoDB（mongodb/mongodb-atlas-local）
 - **异步驱动**：Motor
+- **向量模型**：阿里云百炼 text-embedding-v3（1024 维）
 - **包管理**：UV / Python 3.12
 
 ## 快速开始
@@ -17,19 +18,35 @@
 docker compose up -d
 ```
 
-### 2. 安装依赖
+### 2. 配置环境变量
+
+编辑 `.env`，填入百炼 API Key：
+
+```env
+DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxx
+```
+
+### 3. 安装依赖
 
 ```bash
 uv sync
 ```
 
-### 3. 启动服务
+### 4. 启动服务
 
 ```bash
 uv run uvicorn main:app --reload --port 8000
 ```
 
 访问 http://localhost:8000/docs 查看 Swagger 接口文档。
+
+### 5. 导入测试数据（可选）
+
+```bash
+# 生成 100 条随机数据 + 导入到服务
+uv run python test/generate_users.py
+uv run python test/import_users.py
+```
 
 ## 项目结构
 
@@ -39,17 +56,23 @@ Cupid/
 ├── database.py          # MongoDB 连接 & 索引初始化
 ├── models.py            # Pydantic 数据模型
 ├── routes.py            # API 路由
+├── embeddings.py        # 百炼向量服务（文本→向量）
 ├── docker-compose.yml   # MongoDB 容器编排
 ├── .env                 # 环境变量（不入库）
-└── pyproject.toml
+├── pyproject.toml
+└── test/
+    ├── generate_users.py   # 生成测试用户数据
+    ├── import_users.py     # 批量导入数据到服务
+    └── user_data.json      # 100 条测试用户
 ```
 
 ## API
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/api/profiles` | 创建/更新用户资料 |
-| `POST` | `/api/profiles/search` | 好友搜索（多条件筛选 + 分页） |
+| `POST` | `/api/profiles` | 创建/更新用户资料（自动生成向量嵌入） |
+| `POST` | `/api/profiles/search` | 字段筛选搜索 + 分页 |
+| `POST` | `/api/profiles/search/natural` | 自然语言语义搜索 |
 | `GET` | `/health` | 健康检查 |
 
 ### 创建/更新资料
@@ -72,8 +95,9 @@ curl -X POST http://localhost:8000/api/profiles \
 ```
 
 - 传 `user_id` 则更新已有资料，不传则自动生成新 ID 并创建。
+- 创建/更新时自动调用百炼 Embedding API 将资料文本向量化存入 `embedding` 字段，失败不影响写入。
 
-### 好友搜索
+### 字段筛选搜索
 
 ```bash
 curl -X POST http://localhost:8000/api/profiles/search \
@@ -88,7 +112,28 @@ curl -X POST http://localhost:8000/api/profiles/search \
   }'
 ```
 
-支持的筛选条件：性别、年龄范围、身高范围、省份、城市、学历、婚姻状态、职业（模糊匹配）、兴趣标签。
+支持：性别、年龄范围、身高范围、省份、城市、学历、婚姻状态、职业（模糊匹配）、兴趣标签。
+
+### 自然语言搜索
+
+```bash
+curl -X POST http://localhost:8000/api/profiles/search/natural \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "30岁左右的程序员，喜欢户外运动",
+    "min_score": 0.5,
+    "gender": "male",
+    "city": "北京",
+    "page": 1,
+    "page_size": 20
+  }'
+```
+
+工作流程：
+1. 将 `query` 文本通过百炼转为 1024 维向量
+2. MongoDB 聚合管线计算 query 向量与每个资料 `embedding` 的点积相似度
+3. `min_score` 过滤 + 相似度降序 + 分页
+4. 可叠加结构化条件（gender/city/age 等）预筛选
 
 ## 用户资料字段
 
@@ -102,7 +147,8 @@ curl -X POST http://localhost:8000/api/profiles/search \
 | 婚恋 | `marriage_status`, `has_children`, `want_children` | enum/bool |
 | 习惯 | `smoking`, `drinking` | bool |
 | 介绍 | `self_intro`, `interests`, `avatar_url` | string/list |
-| 择偶偏好 | `preference` (性别/年龄/身高/学历/地区) | object |
+| 择偶偏好 | `preference` (性别/年龄/身高/学历/地区/婚姻状态) | object |
+| 向量 | `embedding` | float[1024] |
 
 ## 数据库索引
 
