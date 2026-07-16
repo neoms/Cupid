@@ -5,7 +5,7 @@ from datetime import date, datetime
 from fastapi import APIRouter, HTTPException, status
 
 from database import get_db
-from embeddings import embed_profile, embed_query
+from embeddings import _build_profile_text, embed_profile, embed_query
 from models import (
     NaturalSearchParams,
     NaturalSearchResponse,
@@ -94,6 +94,7 @@ async def create_profile(profile: ProfileCreate):
     doc["updated_at"] = now
 
     # 生成向量嵌入（失败不影响资料创建）
+    doc["embedding_text"] = _build_profile_text(doc)
     try:
         doc["embedding"] = await embed_profile(doc)
     except Exception:
