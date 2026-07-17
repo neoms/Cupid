@@ -82,10 +82,28 @@ async def create_profile(profile: ProfileCreate):
     """
     创建或更新用户资料。
 
-    - 传入 user_id 且存在 → 更新。
-    - 未传 user_id → 自动生成新 ID 并创建。
+    传入 user_id 且存在 → 更新资料；不传 user_id → 自动生成新用户。
+    创建/更新时自动提取所有字段生成文本描述并向量化，用于后续自然语言搜索。
 
-    创建/更新时自动生成向量嵌入（embedding），用于自然语言搜索。
+    字段说明（详见下方 Schema）：
+    - **nickname**: 昵称，1-30字
+    - **gender**: 性别，男/女
+    - **birth_date**: 出生日期，YYYY-MM-DD，用于计算年龄
+    - **height**: 身高(cm)，140-220
+    - **weight**: 体重(kg)，选填，30-200
+    - **province / city**: 所在地，如 广东 / 深圳
+    - **education**: 学历，高中/大专/本科/硕士/博士
+    - **occupation**: 职业，如"程序员"
+    - **industry**: 行业，如"互联网"，选填
+    - **income_range**: 年收入区间，选填
+    - **body_type**: 体型，偏瘦/匀称/运动型/丰满，选填
+    - **marriage_status**: 婚姻状况，默认未婚
+    - **has_children**: 是否有子女
+    - **want_children**: 是否想要孩子，true/false/null
+    - **smoking / drinking**: 是否吸烟/饮酒，true/false/null
+    - **self_intro**: 自我介绍，最多500字，会在语义搜索中被匹配
+    - **interests**: 兴趣爱好标签列表，如["跑步","电影"]
+    - **preference**: 择偶偏好对象，选填
     """
     db = get_db()
     now = datetime.utcnow()
@@ -126,9 +144,23 @@ async def create_profile(profile: ProfileCreate):
 @router.post("/profiles/search", response_model=SearchResponse)
 async def search_profiles(params: SearchParams):
     """
-    按结构化字段搜索好友资料。
+    按结构化字段精确筛选好友资料。
 
-    支持按性别、年龄、身高、地区、学历、婚姻状态、职业等条件筛选，支持分页和排序。
+    所有筛选条件可选，不传则不限制。多条件之间为 AND（同时满足）关系。
+
+    字段说明（详见下方 Schema）：
+    - **gender**: 性别筛选，男/女
+    - **age_min / age_max**: 年龄范围（周岁），如 25-35
+    - **height_min / height_max**: 身高范围(cm)，如 160-175
+    - **province / city**: 所在地，精确匹配
+    - **education**: 学历筛选
+    - **marriage_status**: 婚姻状况筛选
+    - **occupation**: 职业，模糊匹配（如"程序"可匹配"程序员"）
+    - **interests**: 兴趣爱好，包含任一标签即匹配
+    - **page / page_size**: 分页，默认第1页每页20条
+    - **sort_by**: 排序，created_at/height/birth_date，默认按注册时间降序
+
+    返回 total（总数）、当前页 results 列表。
     """
     db = get_db()
     filters = _build_filters(params)
@@ -161,12 +193,25 @@ async def search_profiles(params: SearchParams):
 @router.post("/profiles/search/natural", response_model=NaturalSearchResponse)
 async def natural_search(params: NaturalSearchParams):
     """
-    用自然语言描述搜索好友资料。
+    用自然语言描述搜索好友资料（AI 语义搜索 + 重排）。
 
-    流程：用户描述 → Embedding 粗召回 → 百炼 Reranker 精排 → 返回结果。
-    可叠加结构化条件预筛选（性别、年龄、地区等）。
+    搜索流程：
+    1. 用户描述 → Embedding 向量化
+    2. 余弦相似度粗召回候选
+    3. 百炼 Reranker AI 精排
+    4. 按匹配度降序分页返回
 
-    示例："30岁左右的程序员，喜欢运动，性格开朗"
+    字段说明（详见下方 Schema）：
+    - **query**: 自然语言描述（必填）。如"30岁左右的程序员，喜欢运动，性格开朗"。越详细越精准
+    - **min_score**: 最低余弦相似度阈值(0~1)，低于此值的直接丢弃。默认0.5
+    - **use_rerank**: 是否启用AI重排序。默认开启，大幅提升准确率；关闭则仅用向量相似度
+    - **rerank_top_k**: 粗召回数量，送入AI精排。默认50，上限100。越大覆盖越广
+    - **gender**: 可选，按性别预筛选
+    - **age_min / age_max**: 可选，按年龄范围预筛选（周岁）
+    - **province / city**: 可选，按地区预筛选
+    - **page / page_size**: 分页，默认第1页每页20条
+
+    返回结果中 score 越接近1越匹配。启用重排时 score 为百炼AI给出的 relevance_score。
     """
     db = get_db()
 
