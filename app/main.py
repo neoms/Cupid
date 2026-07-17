@@ -2,10 +2,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from database import close_db, connect_db
-from embeddings import close_embedding_client
-from reranker import close_rerank_client
-from routes import router
+from app.services.database import close_db, connect_db
+from app.services.embeddings import close_embedding_client
+from app.services.reranker import close_rerank_client
+from app.api.profiles import router
 
 
 @asynccontextmanager

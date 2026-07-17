@@ -4,10 +4,10 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, HTTPException, status
 
-from database import get_db
-from embeddings import _build_profile_text, embed_profile, embed_query
-from reranker import rerank_documents
-from models import (
+from app.services.database import get_db
+from app.services.embeddings import _build_profile_text, embed_profile, embed_query
+from app.services.reranker import rerank_documents
+from app.models.schemas import (
     NaturalSearchParams,
     NaturalSearchResponse,
     NaturalSearchResult,
