@@ -8,11 +8,13 @@ from pydantic import BaseModel, Field, model_validator
 # ────────────── 枚举 ──────────────
 
 class Gender(str, Enum):
+    """性别"""
     male = "男"
     female = "女"
 
 
 class EducationLevel(str, Enum):
+    """学历"""
     high_school = "高中"
     associate = "大专"
     bachelor = "本科"
@@ -21,6 +23,7 @@ class EducationLevel(str, Enum):
 
 
 class IncomeRange(str, Enum):
+    """年收入区间"""
     low = "10万以下"
     mid_low = "10-20万"
     mid = "20-50万"
@@ -29,12 +32,14 @@ class IncomeRange(str, Enum):
 
 
 class MarriageStatus(str, Enum):
+    """婚姻状况"""
     never_married = "未婚"
     divorced = "离异"
     widowed = "丧偶"
 
 
 class BodyType(str, Enum):
+    """体型"""
     slim = "偏瘦"
     average = "匀称"
     athletic = "运动型"
@@ -44,15 +49,16 @@ class BodyType(str, Enum):
 # ────────────── 择偶偏好 ──────────────
 
 class PartnerPreference(BaseModel):
-    gender: Gender | None = None
-    age_min: int = Field(default=20, ge=18, le=100, description="期望对方最小年龄")
-    age_max: int = Field(default=40, ge=18, le=100, description="期望对方最大年龄")
+    """择偶偏好"""
+    gender: Gender | None = Field(default=None, description="期望对方性别")
+    age_min: int = Field(default=20, ge=18, le=100, description="期望对方最小年龄（周岁）")
+    age_max: int = Field(default=40, ge=18, le=100, description="期望对方最大年龄（周岁）")
     height_min: int | None = Field(default=None, ge=140, le=220, description="期望对方最低身高(cm)")
     height_max: int | None = Field(default=None, ge=140, le=220, description="期望对方最高身高(cm)")
-    education: EducationLevel | None = None
-    province: str | None = None
-    city: str | None = None
-    marriage_status: MarriageStatus | None = None
+    education: EducationLevel | None = Field(default=None, description="期望对方学历")
+    province: str | None = Field(default=None, max_length=20, description="期望对方所在省份，如'广东'")
+    city: str | None = Field(default=None, max_length=20, description="期望对方所在城市，如'深圳'")
+    marriage_status: MarriageStatus | None = Field(default=None, description="期望对方婚姻状况")
 
     @model_validator(mode="after")
     def check_age_range(self):
@@ -66,77 +72,81 @@ class PartnerPreference(BaseModel):
 # ────────────── 用户资料（请求） ──────────────
 
 class ProfileCreate(BaseModel):
-    """创建/更新用户资料的请求体"""
+    """创建/更新用户资料的请求体
+
+    注：传入 user_id 且已存在则更新资料，不传则自动生成新用户。
+    """
     user_id: str | None = Field(default=None, description="用户唯一ID，不传则自动生成")
-    # 基本信息
-    nickname: str = Field(min_length=1, max_length=30, description="昵称")
-    gender: Gender
-    birth_date: date = Field(description="出生日期")
-    height: int = Field(ge=140, le=220, description="身高(cm)")
-    weight: int | None = Field(default=None, ge=30, le=200, description="体重(kg)")
 
-    # 所在地
-    province: str = Field(min_length=1, max_length=20, description="省份")
-    city: str = Field(min_length=1, max_length=20, description="城市")
+    # ── 基本信息 ──
+    nickname: str = Field(min_length=1, max_length=30, description="昵称/称呼，展示用")
+    gender: Gender = Field(description="性别，可选值：男/女")
+    birth_date: date = Field(description="出生日期，格式 YYYY-MM-DD，用于计算周岁年龄")
+    height: int = Field(ge=140, le=220, description="身高(cm)，范围 140~220")
+    weight: int | None = Field(default=None, ge=30, le=200, description="体重(kg)，选填，范围 30~200")
 
-    # 学历 & 职业
-    education: EducationLevel
-    school: str | None = Field(default=None, max_length=50)
-    occupation: str = Field(min_length=1, max_length=50, description="职业")
-    industry: str | None = Field(default=None, max_length=30, description="行业")
-    income_range: IncomeRange | None = None
+    # ── 所在地 ──
+    province: str = Field(min_length=1, max_length=20, description="省份，如'广东'")
+    city: str = Field(min_length=1, max_length=20, description="城市，如'深圳'")
 
-    # 外貌
-    body_type: BodyType | None = None
+    # ── 学历 & 职业 ──
+    education: EducationLevel = Field(description="学历，可选值：高中/大专/本科/硕士/博士")
+    school: str | None = Field(default=None, max_length=50, description="毕业院校，选填")
+    occupation: str = Field(min_length=1, max_length=50, description="职业，如'程序员'、'教师'")
+    industry: str | None = Field(default=None, max_length=30, description="行业，如'互联网'、'金融'，选填")
+    income_range: IncomeRange | None = Field(default=None, description="年收入区间，可选值：10万以下/10-20万/20-50万/50-100万/100万以上")
 
-    # 婚恋状态
-    marriage_status: MarriageStatus = Field(default=MarriageStatus.never_married)
-    has_children: bool = False
-    want_children: bool | None = None
+    # ── 外貌 ──
+    body_type: BodyType | None = Field(default=None, description="体型，可选值：偏瘦/匀称/运动型/丰满")
 
-    # 生活习惯
-    smoking: bool | None = None
-    drinking: bool | None = None
+    # ── 婚恋状态 ──
+    marriage_status: MarriageStatus = Field(default=MarriageStatus.never_married, description="婚姻状况，可选值：未婚/离异/丧偶，默认未婚")
+    has_children: bool = Field(default=False, description="是否有子女，默认 false")
+    want_children: bool | None = Field(default=None, description="是否想要孩子，true=想/false=不想/null=未表态")
 
-    # 自我介绍
-    self_intro: str | None = Field(default=None, max_length=500, description="自我介绍")
-    interests: list[str] = Field(default_factory=list, description="兴趣爱好标签")
-    avatar_url: str | None = None
+    # ── 生活习惯 ──
+    smoking: bool | None = Field(default=None, description="是否吸烟，true=吸/false=不吸/null=未知")
+    drinking: bool | None = Field(default=None, description="是否饮酒，true=喝/false=不喝/null=未知")
 
-    # 择偶偏好
-    preference: PartnerPreference | None = None
+    # ── 自我介绍 ──
+    self_intro: str | None = Field(default=None, max_length=500, description="自我介绍，最多 500 字")
+    interests: list[str] = Field(default_factory=list, description="兴趣爱好标签列表，如 ['跑步','电影','旅行']")
+    avatar_url: str | None = Field(default=None, description="头像图片 URL")
+
+    # ── 择偶偏好 ──
+    preference: PartnerPreference | None = Field(default=None, description="择偶偏好，选填")
 
 
 # ────────────── 用户资料（响应） ──────────────
 
 class ProfileResponse(BaseModel):
-    """返回给前端的用户资料"""
-    id: str = Field(alias="_id")
-    user_id: str
-    nickname: str
-    gender: Gender
-    birth_date: date
-    age: int = Field(description="年龄（实时计算）")
-    height: int
-    weight: int | None = None
-    province: str
-    city: str
-    education: EducationLevel
-    school: str | None = None
-    occupation: str
-    industry: str | None = None
-    income_range: IncomeRange | None = None
-    body_type: BodyType | None = None
-    marriage_status: MarriageStatus
-    has_children: bool = False
-    want_children: bool | None = None
-    smoking: bool | None = None
-    drinking: bool | None = None
-    self_intro: str | None = None
-    interests: list[str] = []
-    avatar_url: str | None = None
-    preference: PartnerPreference | None = None
-    created_at: datetime
+    """返回给前端的用户资料（含实时计算的年龄）"""
+    id: str = Field(alias="_id", description="MongoDB 文档 ID，唯一标识")
+    user_id: str = Field(description="用户业务 ID，创建时自动生成")
+    nickname: str = Field(description="昵称")
+    gender: Gender = Field(description="性别")
+    birth_date: date = Field(description="出生日期")
+    age: int = Field(description="周岁年龄，根据 birth_date 实时计算")
+    height: int = Field(description="身高(cm)")
+    weight: int | None = Field(default=None, description="体重(kg)")
+    province: str = Field(description="省份")
+    city: str = Field(description="城市")
+    education: EducationLevel = Field(description="学历")
+    school: str | None = Field(default=None, description="毕业院校")
+    occupation: str = Field(description="职业")
+    industry: str | None = Field(default=None, description="行业")
+    income_range: IncomeRange | None = Field(default=None, description="年收入区间")
+    body_type: BodyType | None = Field(default=None, description="体型")
+    marriage_status: MarriageStatus = Field(description="婚姻状况：未婚/离异/丧偶")
+    has_children: bool = Field(default=False, description="是否有子女")
+    want_children: bool | None = Field(default=None, description="是否想要孩子，null 表示未表态")
+    smoking: bool | None = Field(default=None, description="是否吸烟，null 表示未知")
+    drinking: bool | None = Field(default=None, description="是否饮酒，null 表示未知")
+    self_intro: str | None = Field(default=None, description="自我介绍")
+    interests: list[str] = Field(default_factory=list, description="兴趣爱好标签列表")
+    avatar_url: str | None = Field(default=None, description="头像图片 URL")
+    preference: PartnerPreference | None = Field(default=None, description="择偶偏好")
+    created_at: datetime = Field(description="资料创建时间")
 
     model_config = {"populate_by_name": True}
 
@@ -144,66 +154,75 @@ class ProfileResponse(BaseModel):
 # ────────────── 搜索参数 ──────────────
 
 class SearchParams(BaseModel):
-    """好友搜索过滤参数"""
-    gender: Gender | None = None
-    age_min: int | None = Field(default=None, ge=18, le=100)
-    age_max: int | None = Field(default=None, ge=18, le=100)
-    height_min: int | None = Field(default=None, ge=140, le=220)
-    height_max: int | None = Field(default=None, ge=140, le=220)
-    province: str | None = None
-    city: str | None = None
-    education: EducationLevel | None = None
-    marriage_status: MarriageStatus | None = None
-    occupation: str | None = None
-    interests: list[str] | None = None
+    """结构化字段筛选搜索参数
 
-    # 分页
-    page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
+    所有筛选条件均为可选，不传则不限制。多条件之间为 AND 关系。
+    """
+    gender: Gender | None = Field(default=None, description="按性别筛选")
+    age_min: int | None = Field(default=None, ge=18, le=100, description="最小年龄（周岁）")
+    age_max: int | None = Field(default=None, ge=18, le=100, description="最大年龄（周岁）")
+    height_min: int | None = Field(default=None, ge=140, le=220, description="最低身高(cm)")
+    height_max: int | None = Field(default=None, ge=140, le=220, description="最高身高(cm)")
+    province: str | None = Field(default=None, description="所在省份，精确匹配，如'广东'")
+    city: str | None = Field(default=None, description="所在城市，精确匹配，如'深圳'")
+    education: EducationLevel | None = Field(default=None, description="学历筛选")
+    marriage_status: MarriageStatus | None = Field(default=None, description="婚姻状况筛选")
+    occupation: str | None = Field(default=None, description="职业，模糊匹配，如输入'程序'可匹配'程序员'")
+    interests: list[str] | None = Field(default=None, description="兴趣爱好筛选，包含任一标签即匹配，如 ['跑步','游泳']")
 
-    # 排序（可选按注册时间、身高）
-    sort_by: str | None = Field(default="created_at", pattern=r"^(created_at|height|birth_date)$")
+    # ── 分页 ──
+    page: int = Field(default=1, ge=1, description="页码，从 1 开始")
+    page_size: int = Field(default=20, ge=1, le=100, description="每页数量，最大 100")
+
+    # ── 排序 ──
+    sort_by: str | None = Field(default="created_at", pattern=r"^(created_at|height|birth_date)$", description="排序字段：created_at(注册时间)/height(身高)/birth_date(出生日期)，默认按注册时间降序")
 
 
 class SearchResponse(BaseModel):
-    """搜索接口响应"""
-    total: int
-    page: int
-    page_size: int
-    results: list[ProfileResponse]
+    """结构化搜索接口响应"""
+    total: int = Field(description="符合条件的总记录数")
+    page: int = Field(description="当前页码")
+    page_size: int = Field(description="每页数量")
+    results: list[ProfileResponse] = Field(description="当前页的用户资料列表")
 
 
 # ────────────── 自然语言搜索 ──────────────
 
 class NaturalSearchParams(BaseModel):
-    """自然语言搜索参数"""
-    query: str = Field(min_length=1, max_length=500, description="自然语言描述，如'30岁左右的程序员，喜欢运动'")
-    min_score: float = Field(default=0.5, ge=0, le=1.0, description="最低余弦相似度阈值")
+    """自然语言搜索参数
 
-    # 重排
-    use_rerank: bool = Field(default=True, description="是否启用百炼重排序（大幅提升准确率）")
-    rerank_top_k: int = Field(default=50, ge=1, le=100, description="粗召回候选数量，送入重排模型精排")
+    用一句话描述理想对象，系统自动理解语义并匹配。
+    流程：用户描述 → 向量粗召回 → 百炼 Reranker 精排 → 返回结果。
+    可叠加结构化预筛选缩小候选范围。
+    """
+    query: str = Field(min_length=1, max_length=500, description="自然语言描述，如'30岁左右的程序员，喜欢运动，性格开朗'")
+    min_score: float = Field(default=0.5, ge=0, le=1.0, description="最低余弦相似度阈值，低于此分数的候选不进入重排")
 
-    # 可选的结构化预筛选
-    gender: Gender | None = None
-    age_min: int | None = Field(default=None, ge=18, le=100)
-    age_max: int | None = Field(default=None, ge=18, le=100)
-    province: str | None = None
-    city: str | None = None
+    # ── 重排 ──
+    use_rerank: bool = Field(default=True, description="是否启用百炼重排序，默认开启，关闭则仅用向量相似度排序")
+    rerank_top_k: int = Field(default=50, ge=1, le=100, description="粗召回候选数量（送入重排模型精排），默认 50，上限 100")
 
-    page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
+    # ── 可选的结构化预筛选（缩小语义搜索范围） ──
+    gender: Gender | None = Field(default=None, description="按性别预筛选")
+    age_min: int | None = Field(default=None, ge=18, le=100, description="按最小年龄预筛选（周岁）")
+    age_max: int | None = Field(default=None, ge=18, le=100, description="按最大年龄预筛选（周岁）")
+    province: str | None = Field(default=None, description="按省份预筛选，精确匹配")
+    city: str | None = Field(default=None, description="按城市预筛选，精确匹配")
+
+    # ── 分页 ──
+    page: int = Field(default=1, ge=1, description="页码，从 1 开始")
+    page_size: int = Field(default=20, ge=1, le=100, description="每页数量，最大 100")
 
 
 class NaturalSearchResult(BaseModel):
     """自然语言搜索结果"""
-    profile: ProfileResponse
-    score: float = Field(description="语义相似度分数 (0~1)，启用重排时为百炼 relevance_score")
+    profile: ProfileResponse = Field(description="匹配到的用户资料")
+    score: float = Field(description="语义相似度分数 (0~1)。启用重排时为百炼 relevance_score，值越接近 1 越匹配；未启用时为余弦相似度")
 
 
 class NaturalSearchResponse(BaseModel):
     """自然语言搜索响应"""
-    total: int
-    page: int
-    page_size: int
-    results: list[NaturalSearchResult]
+    total: int = Field(description="符合条件的总记录数（重排模式下上限为 rerank_top_k）")
+    page: int = Field(description="当前页码")
+    page_size: int = Field(description="每页数量")
+    results: list[NaturalSearchResult] = Field(description="当前页的搜索结果，按匹配度降序排列")
