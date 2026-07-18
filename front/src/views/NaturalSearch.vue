@@ -108,7 +108,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { naturalSearch } from '../api'
-import type { SearchResult } from '../types/api'
+import type { NaturalSearchParams, SearchResult } from '../types/api'
 
 const query = ref('')
 const useOptimization = ref(false)
@@ -140,14 +140,14 @@ async function search() {
     total.value = 0
     traceUrl.value = ''
   try {
-    const params = {
+    const params: NaturalSearchParams = {
       query: query.value, min_score: 0.5,
       use_query_optimization: useOptimization.value,
       use_rerank: useRerank.value, rerank_top_k: 50,
       page: page.value, page_size: pageSize,
-      gender: gender.value || undefined,
-      education: education.value || undefined,
-      marriage_status: marriageStatus.value || undefined,
+      gender: (gender.value || undefined) as NaturalSearchParams['gender'],
+      education: (education.value || undefined) as NaturalSearchParams['education'],
+      marriage_status: (marriageStatus.value || undefined) as NaturalSearchParams['marriage_status'],
       age_min: ageMin.value ?? undefined, age_max: ageMax.value ?? undefined,
       height_min: heightMin.value ?? undefined, height_max: heightMax.value ?? undefined,
       province: province.value || undefined,
