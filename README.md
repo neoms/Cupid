@@ -1,6 +1,6 @@
 # Cupid
 
-婚恋交友用户资料后台服务，基于 FastAPI + MongoDB Atlas Local 构建，支持字段筛选搜索与 AI 语义搜索（查询优化 → 向量召回 → 百炼重排）。
+晓夕成家用户资料查询后台微服务demo，基于 FastAPI + MongoDB Atlas Local 构建，支持字段筛选搜索与 AI 语义搜索（查询优化 → 向量召回 → 百炼重排）。
 
 ## 技术栈
 
@@ -10,48 +10,127 @@
 - **向量化**：阿里云百炼 text-embedding-v3（1024 维）
 - **语义重排**：阿里云百炼 qwen3-vl-rerank
 - **查询优化**：阿里云百炼 qwen-plus（可选，LLM 扩写简短查询）
+- **追踪 & 评估**：LangFuse Cloud（tracing + evaluation）
 - **包管理**：UV / Python 3.12+
 
 ## 快速开始
 
-### 1. 启动 MongoDB
+### 前置要求
+
+- Python >= 3.12（推荐使用 [uv](https://docs.astral.sh/uv/)）
+- Docker（用于运行 MongoDB）
+- 阿里云百炼 API Key（[控制台获取](https://bailian.console.aliyun.com/)）
+- （可选）[LangFuse Cloud](https://cloud.langfuse.com) 账号，用于 AI 调用追踪
+
+### 1. 拉取代码
 
 ```bash
-docker compose up -d
+git clone <your-repo-url>
+cd Cupid
 ```
 
 ### 2. 配置环境变量
 
-编辑 `.env`，填入百炼 API Key：
+项目根目录 `.env` 文件控制全部配置，参考以下模板创建：
 
 ```env
+# ── MongoDB ──
+MONGO_PORT=27017
+MONGO_INITDB_ROOT_USERNAME=admin
+MONGO_INITDB_ROOT_PASSWORD=your-password
+MONGO_DATABASE=cupid
+
+# ── 阿里云百炼（必填） ──
 DASHSCOPE_API_KEY=sk-your-key-here
 EMBEDDING_MODEL=text-embedding-v3
 EMBEDDING_DIM=1024
 RERANK_MODEL=qwen3-vl-rerank
 LLM_MODEL=qwen-plus
+
+# ── LangFuse Cloud（可选，不配置则不上报追踪） ──
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ```
 
-### 3. 安装依赖
+> `.env` 中的 MongoDB 凭证会被 `docker-compose.yml` 读取，因此需要先配置好再启动 Docker。
+
+### 3. 启动 MongoDB
+
+使用项目根目录的 `docker-compose.yml` 一键启动：
+
+```bash
+docker compose up -d
+```
+
+等待 MongoDB 就绪（healthcheck passing）：
+
+```bash
+docker ps --filter name=cupid-mongodb
+# STATUS 列应显示 "(healthy)"
+```
+
+### 4. 安装依赖
 
 ```bash
 uv sync
 ```
 
-### 4. 启动服务
+### 5. 启动服务
 
 ```bash
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
+看到以下日志表示启动成功：
+
+```
+✓ MongoDB 已连接 (cupid)
+INFO:     Uvicorn running on http://0.0.0.0:8000
+```
+
 访问 http://localhost:8000/docs 查看 Swagger 接口文档（含完整字段说明和示例数据）。
 
-### 5. 导入测试数据（可选）
+### 6. 导入测试数据（可选）
 
 ```bash
-uv run python test/generate_users.py
-uv run python test/import_users.py
+uv run python test/generate_users.py   # 生成 200 条随机用户，输出到 user_data.json
+uv run python test/import_users.py     # 批量导入到服务（自动向量化）
 ```
+
+### 7. 验证全链路
+
+一切就绪后，发一个完整的语义搜索请求验证所有环节：
+
+```bash
+curl -X POST http://localhost:8000/api/profiles/search/natural \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "30岁左右的程序员，喜欢运动",
+    "use_query_optimization": true,
+    "use_rerank": true,
+    "page": 1,
+    "page_size": 5
+  }'
+```
+
+如果配置了 LangFuse，登录 [cloud.langfuse.com](https://cloud.langfuse.com) 即可看到这次请求的完整追踪链路：
+
+```
+natural_search (总耗时)
+├── optimize_query (LLM 查询优化)
+├── embed_text      (查询向量化)
+└── rerank_documents (AI 精排)
+```
+
+### 常见问题
+
+| 现象 | 排查 |
+|------|------|
+| 服务启动报 MongoDB 连接失败 | 确认 `docker compose up -d` 已执行且容器 healthy |
+| 自然语言搜索返回空 | 检查 `DASHSCOPE_API_KEY` 是否正确，是否有导入数据 |
+| LangFuse 控制台无数据 | 确认 `.env` 中三个 `LANGFUSE_*` 均正确配置 |
+| Docker 端口冲突 | 修改 `.env` 中 `MONGO_PORT` 为其他端口 |
 
 ## 项目结构
 
@@ -66,12 +145,19 @@ Cupid/
 │   ├── models/
 │   │   ├── __init__.py
 │   │   └── schemas.py           # Pydantic 数据模型（请求/响应）
+│   ├── observability/
+│   │   ├── __init__.py          # 可观测性统一入口
+│   │   └── langfuse/
+│   │       └── client.py        # LangFuse 客户端 & flush 管理
 │   └── services/
 │       ├── __init__.py
 │       ├── database.py          # MongoDB 连接 & 索引初始化
-│       ├── embeddings.py        # 百炼向量化服务
-│       ├── query_optimizer.py   # 百炼 LLM 查询优化
-│       └── reranker.py          # 百炼重排序服务
+│       ├── embeddings.py        # 百炼向量化服务（含 @observe）
+│       ├── query_optimizer.py   # 百炼 LLM 查询优化（含 @observe）
+│       └── reranker.py          # 百炼重排序服务（含 @observe）
+├── docker/
+│   ├── mongodb-docker-compose.yml
+│   └── langfuse-docker-compose.yml  # LangFuse 本地部署（可选）
 ├── test/
 │   ├── generate_users.py        # 生成测试用户数据
 │   ├── import_users.py          # 批量导入到服务
@@ -192,6 +278,24 @@ curl -X POST http://localhost:8000/api/profiles/search/natural \
 > **查询优化**：当用户输入很短（如"找个程序员"）时，开启 `use_query_optimization` 会让百炼 qwen-plus 将简短描述扩写为包含职业特征、生活场景等维度的丰富语义文本，显著提升匹配精度。优化后的文本会通过 `optimized_query` 字段返回。
 
 返回结果中 `score` 越接近 1 越匹配。启用重排时为百炼 `relevance_score`，未启用时为余弦相似度。重排失败时自动回退到余弦相似度，不影响服务可用性。
+
+## 可观测性 & AI 调用追踪
+
+项目集成了 [LangFuse Cloud](https://cloud.langfuse.com) 用于 AI 链路追踪和评估。
+
+- 在 `.env` 中配置 `LANGFUSE_*` 后，每次语义搜索自动上报 trace
+- 追踪结构：`natural_search → embed_text / optimize_query / rerank_documents`
+- `@observe()` 装饰器嵌入业务代码（services 层），客户端管理逻辑统一放在 `app/observability/`
+- 服务关闭时自动 flush 确保数据不丢失
+
+```text
+app/observability/
+├── __init__.py              # 统一导出
+└── langfuse/
+    └── client.py            # LangFuse 客户端初始化 & flush
+```
+
+未来评估相关逻辑（deepeval 等）也将放在 `observability/` 目录下。
 
 ## 用户资料字段
 
