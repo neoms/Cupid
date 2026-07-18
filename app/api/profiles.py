@@ -3,7 +3,7 @@ import uuid
 from datetime import date, datetime
 
 from fastapi import APIRouter, HTTPException, status
-from langfuse import observe
+from langfuse import get_client, observe
 
 from app.services.database import get_db
 from app.services.embeddings import _build_profile_text, embed_profile, embed_query
@@ -218,6 +218,9 @@ async def natural_search(params: NaturalSearchParams):
     """
     db = get_db()
 
+    lf = get_client()
+    trace_url = lf.get_trace_url() if lf.get_current_trace_id() else None
+
     # 0. 查询优化（可选）
     search_query = params.query
     optimized_query = None
@@ -269,6 +272,7 @@ async def natural_search(params: NaturalSearchParams):
         return NaturalSearchResponse(
             total=0, page=params.page, page_size=params.page_size,
             results=[], optimized_query=optimized_query,
+            langfuse_trace_url=trace_url,
         )
 
     # 5. 获取候选集
@@ -338,4 +342,5 @@ async def natural_search(params: NaturalSearchParams):
         page_size=params.page_size,
         results=results,
         optimized_query=optimized_query,
+        langfuse_trace_url=trace_url,
     )

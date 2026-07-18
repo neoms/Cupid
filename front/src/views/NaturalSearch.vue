@@ -65,7 +65,13 @@
       </div>
 
       <div class="result-area" v-if="results.length">
-        <p class="count">共 {{ total }} 条结果（第 {{ page }} 页）</p>
+        <div class="result-header">
+          <span class="count">共 {{ total }} 条结果（第 {{ page }} 页）</span>
+          <span class="trace-group" v-if="traceUrl">
+            <a class="trace-link" :href="traceUrl" target="_blank">📊 查看追踪</a>
+            <span class="trace-hint">数据 3~5 秒后可查看</span>
+          </span>
+        </div>
 
         <div class="profile-card" v-for="(item, idx) in results" :key="idx">
           <div class="card-top">
@@ -125,12 +131,14 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = 20
 const optimizedQuery = ref('')
+const traceUrl = ref('')
 
 async function search() {
   loading.value = true
   error.value = ''
-  results.value = []
-  total.value = 0
+    results.value = []
+    total.value = 0
+    traceUrl.value = ''
   try {
     const params = {
       query: query.value, min_score: 0.5,
@@ -150,6 +158,7 @@ async function search() {
     results.value = data.results
     total.value = data.total
     optimizedQuery.value = data.optimized_query || ''
+    traceUrl.value = data.langfuse_trace_url || ''
   } catch (e: any) {
     error.value = '搜索失败：' + (e.response?.data?.detail || e.message)
   } finally {
@@ -201,7 +210,12 @@ button:disabled { background: #dde0e5; color: #9ba8b4; cursor: not-allowed; }
 .empty { max-width: 680px; margin: 120px auto 0; text-align: center; }
 .empty-icon { font-size: 2.4rem; display: block; margin-bottom: 12px; }
 .empty p { color: #9ba8b4; font-size: 0.95rem; }
-.count { font-size: 0.85rem; color: #9ba8b4; margin-bottom: 14px; }
+.result-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.count { font-size: 0.85rem; color: #9ba8b4; }
+.trace-group { display: flex; align-items: center; gap: 6px; }
+.trace-link { font-size: 0.8rem; color: #e0526e; text-decoration: none; padding: 4px 12px; border: 1px solid #f0d0d6; border-radius: 6px; transition: background 0.15s; }
+.trace-link:hover { background: #fff0f3; }
+.trace-hint { font-size: 0.72rem; color: #b0bcc8; }
 
 .profile-card {
   background: #fff; border: 1px solid #eef1f5; border-radius: 12px;

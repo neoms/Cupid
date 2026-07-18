@@ -364,4 +364,5 @@ class NaturalSearchResponse(BaseModel):
     page: int = Field(description="当前页码")
     page_size: int = Field(description="每页返回条数")
     results: list[NaturalSearchResult] = Field(description="当前页搜索结果，按匹配度从高到低排列")
-    optimized_query: str | None = Field(default=None, description="开启查询优化后，LLM 扩写后的查询文本，可用于调试和效果验证")
+    optimized_query: str | None = Field(default=None, description="开启查询优化后，LLM 扩写后的查询文本")
+    langfuse_trace_url: str | None = Field(default=None, description="LangFuse 追踪链接，点此查看此次搜索的完整调用链路")
