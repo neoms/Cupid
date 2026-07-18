@@ -5,6 +5,7 @@ from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
+from langfuse import observe
 
 load_dotenv()
 
@@ -93,6 +94,7 @@ def _build_profile_text(profile: dict) -> str:
     return "。".join(parts) + "。"
 
 
+@observe(name="embed_text")
 async def embed_text(text: str, text_type: str = "document") -> list[float]:
     """调用百炼 Embedding API 将文本转为向量"""
     if not DASHSCOPE_API_KEY or DASHSCOPE_API_KEY == "your-api-key-here":

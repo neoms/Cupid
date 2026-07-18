@@ -5,6 +5,7 @@ from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
+from langfuse import observe
 
 load_dotenv()
 
@@ -15,6 +16,7 @@ RERANK_MODEL = os.getenv("RERANK_MODEL", "qwen3-vl-rerank")
 _client: Optional[httpx.AsyncClient] = None
 
 
+@observe(name="rerank_documents")
 async def rerank_documents(
     query: str,
     documents: list[str],

@@ -5,6 +5,7 @@ from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
+from langfuse import observe
 
 load_dotenv()
 
@@ -27,6 +28,7 @@ SYSTEM_PROMPT = (
 _client: Optional[httpx.AsyncClient] = None
 
 
+@observe(name="optimize_query")
 async def optimize_query(raw_query: str) -> str:
     """
     使用百炼 LLM 将用户简短的原始查询优化为丰富的语义描述。

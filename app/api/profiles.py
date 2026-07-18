@@ -3,6 +3,7 @@ import uuid
 from datetime import date, datetime
 
 from fastapi import APIRouter, HTTPException, status
+from langfuse import observe
 
 from app.services.database import get_db
 from app.services.embeddings import _build_profile_text, embed_profile, embed_query
@@ -192,6 +193,7 @@ async def search_profiles(params: SearchParams):
 # ────────────── 接口 3：自然语言搜索 ──────────────
 
 @router.post("/profiles/search/natural", response_model=NaturalSearchResponse)
+@observe(name="natural_search")
 async def natural_search(params: NaturalSearchParams):
     """
     用自然语言描述搜索好友资料（AI 语义搜索 + 重排）。
