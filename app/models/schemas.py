@@ -304,10 +304,15 @@ class NaturalSearchParams(BaseModel):
 
     # ── 可选的结构化预筛选 ──
     gender: Gender | None = Field(default=None, description="按性别预筛选：男/女，不填则不限制")
+    education: EducationLevel | None = Field(default=None, description="按学历预筛选：高中/大专/本科/硕士/博士")
+    marriage_status: MarriageStatus | None = Field(default=None, description="按婚姻状况预筛选：未婚/离异/丧偶")
     age_min: int | None = Field(default=None, ge=18, le=100, description="按最小年龄预筛选（周岁），不填则不限制")
     age_max: int | None = Field(default=None, ge=18, le=100, description="按最大年龄预筛选（周岁），不填则不限制")
+    height_min: int | None = Field(default=None, ge=140, le=220, description="按最低身高预筛选(cm)")
+    height_max: int | None = Field(default=None, ge=140, le=220, description="按最高身高预筛选(cm)")
     province: str | None = Field(default=None, description="按省份预筛选，精确匹配。如'广东'")
     city: str | None = Field(default=None, description="按城市预筛选，精确匹配。如'深圳'")
+    occupation: str | None = Field(default=None, description="按职业预筛选，模糊匹配。如'程序'可匹配'程序员'")
 
     # ── 分页 ──
     page: int = Field(default=1, ge=1, description="页码，从1开始")
