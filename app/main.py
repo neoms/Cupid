@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from app.services.database import close_db, connect_db
 from app.services.embeddings import close_embedding_client
+from app.services.query_optimizer import close_optimizer_client
 from app.services.reranker import close_rerank_client
 from app.api.profiles import router
 
@@ -14,6 +15,7 @@ async def lifespan(app: FastAPI):
     await connect_db()
     yield
     await close_rerank_client()
+    await close_optimizer_client()
     await close_embedding_client()
     await close_db()
 

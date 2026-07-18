@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.services.database import get_db
 from app.services.embeddings import _build_profile_text, embed_profile, embed_query
+from app.services.query_optimizer import optimize_query
 from app.services.reranker import rerank_documents
 from app.models.schemas import (
     NaturalSearchParams,
@@ -196,28 +197,40 @@ async def natural_search(params: NaturalSearchParams):
     用自然语言描述搜索好友资料（AI 语义搜索 + 重排）。
 
     搜索流程：
-    1. 用户描述 → Embedding 向量化
-    2. 余弦相似度粗召回候选
-    3. 百炼 Reranker AI 精排
-    4. 按匹配度降序分页返回
+    1. 【可选】用户描述 → LLM 查询优化（扩写简短的原始查询）
+    2. 优化后的查询 → Embedding 向量化
+    3. 余弦相似度粗召回候选
+    4. 百炼 Reranker AI 精排
+    5. 按匹配度降序分页返回
 
     字段说明（详见下方 Schema）：
-    - **query**: 自然语言描述（必填）。如"30岁左右的程序员，喜欢运动，性格开朗"。越详细越精准
+    - **query**: 自然语言描述（必填）。如"30岁左右的程序员，喜欢运动，性格开朗"
+    - **use_query_optimization**: 是否用 LLM 优化查询。简短输入如"找个程序员"会被扩写，默认关闭
     - **min_score**: 最低余弦相似度阈值(0~1)，低于此值的直接丢弃。默认0.5
-    - **use_rerank**: 是否启用AI重排序。默认开启，大幅提升准确率；关闭则仅用向量相似度
-    - **rerank_top_k**: 粗召回数量，送入AI精排。默认50，上限100。越大覆盖越广
-    - **gender**: 可选，按性别预筛选
-    - **age_min / age_max**: 可选，按年龄范围预筛选（周岁）
-    - **province / city**: 可选，按地区预筛选
+    - **use_rerank**: 是否启用AI重排序。默认开启；关闭则仅用向量相似度
+    - **rerank_top_k**: 粗召回数量，送入AI精排。默认50，上限100
+    - **gender / age_min / age_max / province / city**: 可选的结构化预筛选
     - **page / page_size**: 分页，默认第1页每页20条
 
-    返回结果中 score 越接近1越匹配。启用重排时 score 为百炼AI给出的 relevance_score。
+    返回结果中 score 越接近1越匹配，optimized_query 为 LLM 扩写后的查询文本。
     """
     db = get_db()
 
+    # 0. 查询优化（可选）
+    search_query = params.query
+    optimized_query = None
+    if params.use_query_optimization:
+        try:
+            search_query = await optimize_query(params.query)
+            optimized_query = search_query
+        except Exception:
+            import traceback
+            print(f"[WARN] 查询优化失败，使用原始查询\n{traceback.format_exc()}")
+            search_query = params.query
+
     # 1. 将查询文本转为向量
     try:
-        query_embedding = await embed_query(params.query)
+        query_embedding = await embed_query(search_query)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"向量化查询失败: {e}")
 
@@ -251,7 +264,10 @@ async def natural_search(params: NaturalSearchParams):
     total = count_result[0]["total"] if count_result else 0
 
     if total == 0:
-        return NaturalSearchResponse(total=0, page=params.page, page_size=params.page_size, results=[])
+        return NaturalSearchResponse(
+            total=0, page=params.page, page_size=params.page_size,
+            results=[], optimized_query=optimized_query,
+        )
 
     # 5. 获取候选集
     if params.use_rerank:
@@ -280,7 +296,7 @@ async def natural_search(params: NaturalSearchParams):
         try:
             # 提取每个候选资料的文本表示
             doc_texts = [d.get("embedding_text", "") for d in docs]
-            rerank_results = await rerank_documents(params.query, doc_texts)
+            rerank_results = await rerank_documents(search_query, doc_texts)
 
             # 建立 index → relevance_score 映射
             score_map = {r["index"]: r["relevance_score"] for r in rerank_results}
@@ -319,4 +335,5 @@ async def natural_search(params: NaturalSearchParams):
         page=params.page,
         page_size=params.page_size,
         results=results,
+        optimized_query=optimized_query,
     )

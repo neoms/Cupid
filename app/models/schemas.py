@@ -286,6 +286,12 @@ class NaturalSearchParams(BaseModel):
     )
     min_score: float = Field(default=0.5, ge=0, le=1.0, description="最低余弦相似度阈值(0~1)，低于此分数的候选直接丢弃。默认0.5")
 
+    # ── 查询优化 ──
+    use_query_optimization: bool = Field(
+        default=False,
+        description="是否用百炼 LLM 优化用户查询。简短输入如'找个程序员'会被扩写为丰富的语义描述，提升匹配精度。默认关闭",
+    )
+
     # ── 重排控制 ──
     use_rerank: bool = Field(
         default=True,
@@ -313,6 +319,7 @@ class NaturalSearchParams(BaseModel):
                 {
                     "query": "30岁左右的程序员，喜欢运动和旅行，性格开朗大方",
                     "min_score": 0.5,
+                    "use_query_optimization": False,
                     "use_rerank": True,
                     "rerank_top_k": 50,
                     "gender": "女",
@@ -324,8 +331,9 @@ class NaturalSearchParams(BaseModel):
                     "page_size": 20,
                 },
                 {
-                    "query": "温柔体贴的女生，本科学历，有稳定工作",
+                    "query": "找个程序员",
                     "min_score": 0.5,
+                    "use_query_optimization": True,
                     "use_rerank": True,
                     "rerank_top_k": 50,
                     "gender": "女",
@@ -351,3 +359,4 @@ class NaturalSearchResponse(BaseModel):
     page: int = Field(description="当前页码")
     page_size: int = Field(description="每页返回条数")
     results: list[NaturalSearchResult] = Field(description="当前页搜索结果，按匹配度从高到低排列")
+    optimized_query: str | None = Field(default=None, description="开启查询优化后，LLM 扩写后的查询文本，可用于调试和效果验证")

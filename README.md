@@ -1,6 +1,6 @@
 # Cupid
 
-婚恋交友用户资料后台服务，基于 FastAPI + MongoDB Atlas Local 构建，支持字段筛选搜索与 AI 语义搜索（向量召回 + 百炼重排）。
+婚恋交友用户资料后台服务，基于 FastAPI + MongoDB Atlas Local 构建，支持字段筛选搜索与 AI 语义搜索（查询优化 → 向量召回 → 百炼重排）。
 
 ## 技术栈
 
@@ -9,6 +9,7 @@
 - **异步驱动**：Motor
 - **向量化**：阿里云百炼 text-embedding-v3（1024 维）
 - **语义重排**：阿里云百炼 qwen3-vl-rerank
+- **查询优化**：阿里云百炼 qwen-plus（可选，LLM 扩写简短查询）
 - **包管理**：UV / Python 3.12+
 
 ## 快速开始
@@ -28,6 +29,7 @@ DASHSCOPE_API_KEY=sk-your-key-here
 EMBEDDING_MODEL=text-embedding-v3
 EMBEDDING_DIM=1024
 RERANK_MODEL=qwen3-vl-rerank
+LLM_MODEL=qwen-plus
 ```
 
 ### 3. 安装依赖
@@ -68,6 +70,7 @@ Cupid/
 │       ├── __init__.py
 │       ├── database.py          # MongoDB 连接 & 索引初始化
 │       ├── embeddings.py        # 百炼向量化服务
+│       ├── query_optimizer.py   # 百炼 LLM 查询优化
 │       └── reranker.py          # 百炼重排序服务
 ├── test/
 │   ├── generate_users.py        # 生成测试用户数据
@@ -152,8 +155,9 @@ curl -X POST http://localhost:8000/api/profiles/search \
 curl -X POST http://localhost:8000/api/profiles/search/natural \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "30岁左右的程序员，喜欢运动和旅行，性格开朗",
+    "query": "找个程序员",
     "min_score": 0.5,
+    "use_query_optimization": true,
     "use_rerank": true,
     "rerank_top_k": 50,
     "gender": "女",
@@ -168,21 +172,24 @@ curl -X POST http://localhost:8000/api/profiles/search/natural \
 **搜索流程**：
 
 ```
-用户描述 → 百炼 Embedding 向量化 → MongoDB 余弦相似度粗召回 top-K
-                                              ↓
-                                    百炼 qwen3-vl-rerank 精排
-                                              ↓
-                                   按 relevance_score 降序分页返回
+用户描述 → [可选: LLM 查询优化] → Embedding → 余弦相似度粗召回 top-K
+                                                    ↓
+                                          百炼 qwen3-vl-rerank 精排
+                                                    ↓
+                                         按 relevance_score 降序分页返回
 ```
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `query` | 自然语言描述（1-500字），越详细越精准 | 必填 |
+| `use_query_optimization` | 是否用 LLM 扩写简短查询（如"找个程序员"→展开为丰富描述） | false |
 | `min_score` | 余弦相似度阈值(0~1)，低于此值的候选丢弃 | 0.5 |
 | `use_rerank` | 是否启用百炼 AI 重排序，关闭则仅用向量相似度 | true |
 | `rerank_top_k` | 粗召回数量送入精排，上限100 | 50 |
 | `gender/age_min/age_max/province/city` | 可选的结构化预筛选 | - |
 | `page/page_size` | 分页 | 1 / 20 |
+
+> **查询优化**：当用户输入很短（如"找个程序员"）时，开启 `use_query_optimization` 会让百炼 qwen-plus 将简短描述扩写为包含职业特征、生活场景等维度的丰富语义文本，显著提升匹配精度。优化后的文本会通过 `optimized_query` 字段返回。
 
 返回结果中 `score` 越接近 1 越匹配。启用重排时为百炼 `relevance_score`，未启用时为余弦相似度。重排失败时自动回退到余弦相似度，不影响服务可用性。
 
